@@ -4,7 +4,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 
-from tcp import HOSTS, INTERVAL, cache, log, poll
+from tcp import HOSTS, INTERVAL, log, poll
+from database import init_db, get_latest_reading, get_all_latest_readings
 
 logging.basicConfig(
     level=logging.INFO,
@@ -14,6 +15,7 @@ logging.basicConfig(
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    await init_db()
     log.info("starting pollers for %s every %.1fs", HOSTS, INTERVAL)
     tasks = [asyncio.create_task(poll(host)) for host in HOSTS]
 
@@ -34,11 +36,14 @@ async def root():
 
 @app.get("/sensor")
 async def all_sensors():
-    return cache
+    return await get_all_latest_readings()
 
 
 @app.get("/sensor/{host}")
 async def one_sensor(host: str):
-    if host not in cache:
-        raise HTTPException(404, "host not polled yet")
-    return cache[host]
+    data = await get_latest_reading(host)
+    if data is None:
+        raise HTTPException(404, "no data for this host")
+    return data
+
+
