@@ -32,34 +32,18 @@ async def save_reading(host: str, data: dict):
         )
         await db.commit()
 
-async def get_latest_reading(host: str) -> dict | None:
+async def get_all_readings_in_range(start: str, end: str) -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
             """
             SELECT host, timestamp, temp, humi, airp, lum
             FROM readings
-            WHERE host = ?
-            ORDER BY id DESC
-            LIMIT 1
+            WHERE timestamp >= ?
+              AND timestamp <= ?
+            ORDER BY timestamp ASC
             """,
-            (host,),
-        ) as cursor:
-            row = await cursor.fetchone()
-            return dict(row) if row else None
-
-
-async def get_all_latest_readings() -> list[dict]:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
-            """
-            SELECT host, timestamp, temp, humi, airp, lum
-            FROM readings
-            WHERE id IN (
-                SELECT MAX(id) FROM readings GROUP BY host
-            )
-            """
+            [start, end],
         ) as cursor:
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]

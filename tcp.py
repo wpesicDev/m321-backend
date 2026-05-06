@@ -9,7 +9,7 @@ HOSTS = ["172.20.10.4"]
 # "192.168.1.1"
 
 KEYS = ["temp", "humi", "airp", "lum"]
-INTERVAL = 5.0
+INTERVAL = 3600.0
 
 ERROR_MESSAGES = {
     0: "malformed request",
