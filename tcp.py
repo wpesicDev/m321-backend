@@ -49,21 +49,24 @@ def parse_response(response: str) -> dict:
 
 
 async def poll(host: str):
+    from cluster import state
+
     request = ";".join(KEYS)
 
     while True:
-        try:
-            response = await query(host, request)
-            result = parse_response(response)
-            cache[host] = result
+        if state["is_leader"]:
+            try:
+                response = await query(host, request)
+                result = parse_response(response)
+                cache[host] = result
 
-            if "error" in result:
-                log.warning("%s -> %s", host, response)
-            else:
-                log.info("%s -> %s", host, result)
+                if "error" in result:
+                    log.warning("%s -> %s", host, response)
+                else:
+                    log.info("%s -> %s", host, result)
 
-        except (asyncio.TimeoutError, ConnectionRefusedError, OSError) as e:
-            cache[host] = {"error": str(e) or type(e).__name__}
-            log.error("%s unreachable: %s", host, type(e).__name__)
+            except (asyncio.TimeoutError, ConnectionRefusedError, OSError) as e:
+                cache[host] = {"error": str(e) or type(e).__name__}
+                log.error("%s unreachable: %s", host, type(e).__name__)
 
         await asyncio.sleep(INTERVAL)

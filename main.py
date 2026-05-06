@@ -4,6 +4,14 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 
+import cluster
+from cluster import (
+    NODE_ID,
+    NODE_URL,
+    broadcast_loop,
+    listen_loop,
+    state as cluster_state,
+)
 from tcp import HOSTS, INTERVAL, cache, log, poll
 
 logging.basicConfig(
@@ -14,13 +22,14 @@ logging.basicConfig(
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    log.info("starting pollers for %s every %.1fs", HOSTS, INTERVAL)
-    tasks = [asyncio.create_task(poll(host)) for host in HOSTS]
-
+    log.info("node %d starting at %s, polling %s every %.1fs", NODE_ID, NODE_URL, HOSTS, INTERVAL)
+    bg = [
+        asyncio.create_task(broadcast_loop()),
+        asyncio.create_task(listen_loop()),
+        *[asyncio.create_task(poll(host)) for host in HOSTS],
+    ]
     yield
-
-    log.info("stopping pollers")
-    for task in tasks:
+    for task in bg:
         task.cancel()
 
 
@@ -29,7 +38,14 @@ app = FastAPI(lifespan=lifespan)
 
 @app.get("/")
 async def root():
-    return {"hosts": HOSTS, "interval": INTERVAL}
+    return {
+        "node": NODE_ID,
+        "url": NODE_URL,
+        "is_leader": cluster_state["is_leader"],
+        "peers": cluster.alive_peers(),
+        "hosts": HOSTS,
+        "interval": INTERVAL,
+    }
 
 
 @app.get("/sensor")
