@@ -4,10 +4,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query
 
-from tcp import HOSTS, INTERVAL, log, poll
+from sensor_service import HOSTS, INTERVAL, log, poll, get_current_readings
 from datetime import datetime
 
-from database import init_db, get_latest_reading, get_all_latest_readings, get_all_readings_in_range
+from database import init_db, get_all_readings_in_range
 
 logging.basicConfig(
     level=logging.INFO,
@@ -31,9 +31,10 @@ async def lifespan(_: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 
-@app.get("/")
-async def root():
-    return {"hosts": HOSTS, "interval": INTERVAL}
+
+@app.get("/sensor/current")
+async def sensor_current():
+    return await get_current_readings()
 
 
 @app.get("/sensor/history")
