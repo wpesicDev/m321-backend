@@ -1,7 +1,12 @@
 import asyncio
 import json
+import os
 
-PORT = 8080
+from dotenv import load_dotenv
+
+load_dotenv()
+
+PORT = int(os.getenv("SENSOR_PORT", "8080"))
 
 ERROR_MESSAGES = {
     0: "malformed request",

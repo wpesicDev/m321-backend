@@ -1,12 +1,18 @@
 import asyncio
 import logging
+import os
+
+from dotenv import load_dotenv
 
 from database import save_reading
+from sync_service import broadcast_reading
 from tcp import query, parse_response
 
-HOSTS = ["172.20.10.4"]
+load_dotenv()
+
+HOSTS = [h.strip() for h in os.getenv("SENSOR_HOSTS", "").split(",") if h.strip()]
 KEYS = ["temp", "humi", "airp", "lum"]
-INTERVAL = 3600.0
+INTERVAL = float(os.getenv("POLL_INTERVAL", "3600"))
 
 log = logging.getLogger("sensor")
 cache: dict[str, dict] = {}
@@ -38,8 +44,14 @@ async def poll(host: str):
             else:
                 log.info("%s -> %s", host, result)
                 try:
-                    await save_reading(host, result)
-                    log.info("saved to db: %s", host)
+                    timestamp = await save_reading(host, result)
+                    if timestamp is None:
+                        log.info("duplicate, skipped broadcast: %s", host)
+                    else:
+                        log.info("saved to db: %s", host)
+                        asyncio.create_task(
+                            broadcast_reading({"host": host, "timestamp": timestamp, **result})
+                        )
                 except Exception as e:
                     log.error("db save failed: %s", e)
 
