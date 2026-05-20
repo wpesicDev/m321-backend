@@ -15,16 +15,19 @@ ERROR_MESSAGES = {
 }
 
 
+async def send_request(reader, writer, request: str, timeout: float = 5.0) -> str:
+    writer.write(f"{request}\n".encode())
+    await writer.drain()
+    response = await asyncio.wait_for(reader.readline(), timeout)
+    return response.decode().strip()
+
+
 async def query(host: str, request: str, timeout: float = 5.0) -> str:
     reader, writer = await asyncio.wait_for(
         asyncio.open_connection(host, PORT), timeout
     )
     try:
-        writer.write(f"{request}\n".encode())
-        await writer.drain()
-
-        response = await asyncio.wait_for(reader.readline(), timeout)
-        return response.decode().strip()
+        return await send_request(reader, writer, request, timeout)
     finally:
         writer.close()
         await writer.wait_closed()

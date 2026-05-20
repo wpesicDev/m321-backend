@@ -2,27 +2,28 @@ import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
+from datetime import date, datetime, timedelta
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from aggregation import daily_aggregation_loop
+from database import (
+    add_peer,
+    get_all_readings,
+    get_peers,
+    get_readings_in_range,
+    init_db,
+    ingest_reading,
+    remove_peer,
+    run_retention_aggregation,
+)
 from sensor_service import HOSTS, INTERVAL, log, poll, get_current_readings
-from datetime import datetime
+from sync_service import merge_with_peer, periodic_peer_sync
 
 load_dotenv()
-
-from database import (
-    init_db,
-    get_all_readings,
-    get_all_readings_in_range,
-    add_peer,
-    remove_peer,
-    get_peers,
-    ingest_reading,
-)
-from sync_service import merge_with_peer, periodic_peer_sync
 
 logging.basicConfig(
     level=logging.INFO,
@@ -43,10 +44,11 @@ async def lifespan(_: FastAPI):
     log.info("starting pollers for %s every %.1fs", HOSTS, INTERVAL)
     tasks = [asyncio.create_task(poll(host)) for host in HOSTS]
     tasks.append(asyncio.create_task(periodic_peer_sync()))
+    tasks.append(asyncio.create_task(daily_aggregation_loop()))
 
     yield
 
-    log.info("stopping pollers")
+    log.info("stopping pollers, sync and aggregation")
     for task in tasks:
         task.cancel()
 
@@ -72,12 +74,50 @@ async def sensor_current():
 
 @app.get("/sensor/history")
 async def sensor_history(
-    start: datetime = Query(default_factory=lambda: datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)),
-    end: datetime = Query(default_factory=datetime.now),
+    day: date | None = Query(
+        None,
+        description="Einzelner Tag (YYYY-MM-DD). Liefert alle gespeicherten Werte dieses Tages.",
+        examples=["2026-05-20"],
+    ),
+    start: datetime | None = Query(
+        None,
+        description="Startzeit (nur wenn day nicht gesetzt). Standard: heute 00:00.",
+    ),
+    end: datetime | None = Query(
+        None,
+        description="Endzeit (nur wenn day nicht gesetzt). Standard: jetzt.",
+    ),
 ):
-    if start >= end:
+    if day is not None:
+        start_dt = datetime.combine(day, datetime.min.time())
+        end_dt = start_dt + timedelta(days=1)
+    else:
+        start_dt = start or datetime.now().replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        end_dt = end or datetime.now()
+
+    if start_dt >= end_dt:
         raise HTTPException(400, "start must be before end")
-    return await get_all_readings_in_range(start.isoformat(sep=' ', timespec='seconds'), end.isoformat(sep=' ', timespec='seconds'))
+
+    readings = await get_readings_in_range(
+        start_dt.isoformat(sep=" ", timespec="seconds"),
+        end_dt.isoformat(sep=" ", timespec="seconds"),
+    )
+    return {
+        "day": day.isoformat() if day else None,
+        "start": start_dt.isoformat(sep=" ", timespec="seconds"),
+        "end": end_dt.isoformat(sep=" ", timespec="seconds"),
+        "count": len(readings),
+        "readings": readings,
+    }
+
+
+@app.post("/sensor/aggregate")
+async def sensor_aggregate():
+    """Manueller Trigger für die Retention-Aggregation (z. B. per Cron)."""
+    summary = await run_retention_aggregation()
+    return {"aggregated_buckets": summary}
 
 
 @app.post("/sync/peer")
