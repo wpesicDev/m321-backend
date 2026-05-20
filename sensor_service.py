@@ -18,16 +18,42 @@ log = logging.getLogger("sensor")
 cache: dict[str, dict] = {}
 
 
-async def get_current_readings() -> dict[str, dict]:
+async def _query_host(host: str) -> tuple[str, dict]:
     request = ";".join(KEYS)
-    results = {}
-    for host in HOSTS:
-        try:
-            response = await query(host, request)
-            results[host] = parse_response(response, KEYS)
-        except (asyncio.TimeoutError, ConnectionRefusedError, OSError) as e:
-            results[host] = {"error": str(e) or type(e).__name__}
-    return results
+    try:
+        response = await query(host, request)
+        return host, parse_response(response, KEYS)
+    except (asyncio.TimeoutError, ConnectionRefusedError, OSError) as e:
+        return host, {"error": str(e) or type(e).__name__}
+
+
+async def get_current_readings() -> dict:
+    responses = await asyncio.gather(*(_query_host(host) for host in HOSTS))
+
+    readings: list[tuple[str, dict]] = []
+    errors: dict[str, dict | str] = {}
+    for host, result in responses:
+        if "error" in result:
+            errors[host] = result["error"]
+        else:
+            readings.append((host, result))
+
+    if not readings:
+        return {"sources": [], "errors": errors}
+
+    averaged: dict = {}
+    for key in KEYS:
+        values = [r[key] for _, r in readings if r.get(key) is not None]
+        if values:
+            averaged[key] = sum(values) / len(values)
+
+    response: dict = {
+        "sources": [host for host, _ in readings],
+        **averaged,
+    }
+    if errors:
+        response["errors"] = errors
+    return response
 
 
 async def poll(host: str):
