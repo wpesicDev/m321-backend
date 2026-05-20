@@ -12,7 +12,7 @@ load_dotenv()
 
 HOSTS = [h.strip() for h in os.getenv("SENSOR_HOSTS", "").split(",") if h.strip()]
 KEYS = ["temp", "humi", "airp", "lum"]
-INTERVAL = float(os.getenv("POLL_INTERVAL", "3600"))
+INTERVAL = float(os.getenv("POLL_INTERVAL", "60.0"))
 
 log = logging.getLogger("sensor")
 cache: dict[str, dict] = {}
