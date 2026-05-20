@@ -33,7 +33,17 @@ async def get_current_readings() -> dict:
             readings.append((host, result))
 
     if not readings:
+        log.warning("no sensor hosts responded (errors: %s)", errors)
         return {"sources": [], "errors": errors}
+
+    sources = [host for host, _ in readings]
+    if len(sources) == len(HOSTS) and len(HOSTS) > 1:
+        log.info("averaged readings from all %d hosts: %s", len(sources), sources)
+    elif len(HOSTS) > 1:
+        unreachable = [h for h in HOSTS if h not in sources]
+        log.info("using readings from %s only (unreachable: %s)", sources, unreachable)
+    else:
+        log.info("readings from %s", sources)
 
     averaged: dict = {}
     for key in KEYS:
@@ -42,7 +52,7 @@ async def get_current_readings() -> dict:
             averaged[key] = sum(values) / len(values)
 
     response: dict = {
-        "sources": [host for host, _ in readings],
+        "sources": sources,
         **averaged,
     }
     if errors:
