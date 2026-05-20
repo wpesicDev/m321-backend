@@ -8,7 +8,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from sensor_service import HOSTS, INTERVAL, log, poll, get_current_readings
+from sensor_service import HOSTS, INTERVAL, log, poll, get_current_readings, hourly_maintenance
 from datetime import datetime
 
 load_dotenv()
@@ -21,6 +21,8 @@ from database import (
     remove_peer,
     get_peers,
     ingest_reading,
+    get_hourly_readings_in_range,
+    get_hourly_readings,
 )
 from sync_service import merge_with_peer
 
@@ -42,12 +44,17 @@ async def lifespan(_: FastAPI):
 
     log.info("starting pollers for %s every %.1fs", HOSTS, INTERVAL)
     tasks = [asyncio.create_task(poll(host)) for host in HOSTS]
+    
+    # Start hourly maintenance task
+    maintenance_task = asyncio.create_task(hourly_maintenance())
+    log.info("started hourly maintenance task")
 
     yield
 
-    log.info("stopping pollers")
+    log.info("stopping pollers and maintenance")
     for task in tasks:
         task.cancel()
+    maintenance_task.cancel()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -76,7 +83,7 @@ async def sensor_history(
 ):
     if start >= end:
         raise HTTPException(400, "start must be before end")
-    return await get_all_readings_in_range(start.isoformat(sep=' ', timespec='seconds'), end.isoformat(sep=' ', timespec='seconds'))
+    return await get_hourly_readings_in_range(start.isoformat(sep=' ', timespec='seconds'), end.isoformat(sep=' ', timespec='seconds'))
 
 
 @app.post("/sync/peer")

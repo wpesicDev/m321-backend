@@ -4,7 +4,7 @@ import os
 
 from dotenv import load_dotenv
 
-from database import save_reading
+from database import save_reading, aggregate_hourly, cleanup_old_readings
 from sync_service import broadcast_reading
 from tcp import query, parse_response
 
@@ -86,3 +86,16 @@ async def poll(host: str):
             log.error("%s unreachable: %s", host, type(e).__name__)
 
         await asyncio.sleep(INTERVAL)
+
+
+async def hourly_maintenance():
+    """Run hourly maintenance: aggregate readings and cleanup old data."""
+    while True:
+        try:
+            await asyncio.sleep(3600)  # Run every hour
+            log.info("starting hourly aggregation and cleanup")
+            await aggregate_hourly()
+            await cleanup_old_readings()
+            log.info("hourly maintenance completed")
+        except Exception as e:
+            log.error("hourly maintenance failed: %s", e)
