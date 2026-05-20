@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 
 import httpx
 
@@ -7,6 +8,7 @@ from database import get_all_readings, get_peers, ingest_reading
 
 log = logging.getLogger("sync")
 TIMEOUT = 10.0
+PEER_SYNC_INTERVAL = float(os.getenv("PEER_SYNC_INTERVAL", "60"))
 
 
 async def broadcast_reading(reading: dict):
@@ -50,3 +52,29 @@ async def merge_with_peer(peer: str) -> dict:
             pulled += 1
 
     return {"pushed": pushed, "pulled": pulled}
+
+
+async def periodic_peer_sync():
+    """Background loop: periodically reconcile with every registered peer.
+
+    Why: broadcast_reading is fire-and-forget, so any push that fails while a
+    peer is offline is lost. This loop fills the gap by re-running a full
+    bidirectional merge on an interval — once the peer is reachable again,
+    missed readings flow both ways.
+    """
+    while True:
+        try:
+            peers = await get_peers()
+            for peer in peers:
+                try:
+                    result = await merge_with_peer(peer)
+                    if result["pushed"] or result["pulled"]:
+                        log.info("periodic merge with %s: %s", peer, result)
+                except httpx.HTTPError as e:
+                    log.warning("periodic merge with %s failed: %s", peer, e)
+                except Exception as e:
+                    log.error("periodic merge with %s errored: %s", peer, e)
+        except Exception as e:
+            log.error("periodic_peer_sync loop error: %s", e)
+
+        await asyncio.sleep(PEER_SYNC_INTERVAL)

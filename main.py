@@ -24,7 +24,7 @@ from database import (
     get_hourly_readings_in_range,
     get_hourly_readings,
 )
-from sync_service import merge_with_peer
+from sync_service import merge_with_peer, periodic_peer_sync
 
 logging.basicConfig(
     level=logging.INFO,
