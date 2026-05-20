@@ -22,7 +22,7 @@ from database import (
     get_peers,
     ingest_reading,
 )
-from sync_service import merge_with_peer
+from sync_service import merge_with_peer, periodic_peer_sync
 
 logging.basicConfig(
     level=logging.INFO,
@@ -42,6 +42,7 @@ async def lifespan(_: FastAPI):
 
     log.info("starting pollers for %s every %.1fs", HOSTS, INTERVAL)
     tasks = [asyncio.create_task(poll(host)) for host in HOSTS]
+    tasks.append(asyncio.create_task(periodic_peer_sync()))
 
     yield
 
