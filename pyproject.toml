@@ -1,0 +1,5 @@
+[tool.fastapi]
+app = "main:app"
+
+[tool.uvicorn]
+reload-excludes = ["sensors.db", "*.db", ".watchignore"]
