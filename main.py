@@ -86,6 +86,19 @@ async def sensor_image():
     raise HTTPException(503, "no sensor host returned an image")
 
 
+@app.get("/sensor/beep")
+async def sensor_beep():
+    for host in HOSTS:
+        try:
+            response = await query(host, "beep")
+            result = parse_response(response, ["beep"])
+            if "error" not in result:
+                return {"host": host, "beep": result["beep"]}
+        except (asyncio.TimeoutError, ConnectionRefusedError, OSError):
+            continue
+    raise HTTPException(503, "no sensor host responded to beep")
+
+
 @app.get("/sensor/history")
 async def sensor_history(
     day: date | None = Query(
