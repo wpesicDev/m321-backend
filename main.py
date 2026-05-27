@@ -21,6 +21,7 @@ from database import (
     run_retention_aggregation,
 )
 from sensor_service import HOSTS, INTERVAL, log, poll, get_current_readings
+from tcp import query, parse_response
 from sync_service import merge_with_peer, periodic_peer_sync
 
 load_dotenv()
@@ -70,6 +71,19 @@ class PeerRequest(BaseModel):
 @app.get("/sensor/current")
 async def sensor_current():
     return await get_current_readings()
+
+
+@app.get("/sensor/image")
+async def sensor_image():
+    for host in HOSTS:
+        try:
+            response = await query(host, "img")
+            result = parse_response(response, ["img"])
+            if "error" not in result:
+                return {"host": host, "img": result["img"]}
+        except (asyncio.TimeoutError, ConnectionRefusedError, OSError):
+            continue
+    raise HTTPException(503, "no sensor host returned an image")
 
 
 @app.get("/sensor/history")
