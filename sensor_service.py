@@ -24,13 +24,15 @@ async def get_current_readings() -> dict:
     readings: list[tuple[str, dict]] = []
     errors: dict[str, dict | str] = {}
     for host in HOSTS:
-        result = cache.get(host)
-        if not result:
-            errors[host] = "no data yet"
-        elif "error" in result:
-            errors[host] = result["error"]
-        else:
-            readings.append((host, result))
+        try:
+            response = await query(host, REQUEST)
+            result = parse_response(response, KEYS)
+            if "error" in result:
+                errors[host] = result["error"]
+            else:
+                readings.append((host, result))
+        except Exception as e:
+            errors[host] = str(e)
 
     if not readings:
         log.warning("no sensor hosts responded (errors: %s)", errors)

@@ -76,7 +76,7 @@ async def sensor_current():
 async def sensor_history(
     day: date | None = Query(
         None,
-        description="Einzelner Tag (YYYY-MM-DD). Liefert alle gespeicherten Werte dieses Tages.",
+        description="Single day (YYYY-MM-DD). Returns all stored values for this day.",
         examples=["2026-05-20"],
     ),
     start: datetime | None = Query(
@@ -115,7 +115,7 @@ async def sensor_history(
 
 @app.post("/sensor/aggregate")
 async def sensor_aggregate():
-    """Manueller Trigger für die Retention-Aggregation (z. B. per Cron)."""
+    """Manual trigger for retention aggregation (e.g., via cron)."""
     summary = await run_retention_aggregation()
     return {"aggregated_buckets": summary}
 
